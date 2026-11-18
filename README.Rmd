@@ -1,0 +1,118 @@
+---
+output: github_document
+---
+
+# infer R Package <img src="man/figures/logo.png" alt="A hexagonal logo. A green silhouette of a fir tree sits atop black text, reading 'infer'. The logo has a background in two shades of blue, resembling the Oregon license plate." align="right" width=280 />
+
+
+
+
+<!--figs/infer.svg-->
+<!--http://www.r-pkg.org/badges/version/infer-->
+<!--figs/main.svg-->
+<!--https://img.shields.io/codecov/c/github/tidymodels/infer/main.svg-->
+
+[![R-CMD-check](https://github.com/tidymodels/infer/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/tidymodels/infer/actions/workflows/R-CMD-check.yaml)
+[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/infer)](https://cran.r-project.org/package=infer)
+[![Codecov test coverage](https://codecov.io/gh/tidymodels/infer/graph/badge.svg)](https://app.codecov.io/gh/tidymodels/infer)
+
+The objective of this package is to perform statistical inference using an expressive statistical grammar that coheres with the tidyverse design framework. The package is centered around 4 main verbs, supplemented with many utilities to visualize and extract value from their outputs.
+
++ `specify()` allows you to specify the variable, or relationship between variables, that you're interested in.
++ `hypothesize()` allows you to declare the null hypothesis.
++ `generate()` allows you to generate data reflecting the null hypothesis.
++ `calculate()` allows you to calculate a distribution of statistics from the generated data to form the null distribution.
+
+To learn more about the principles underlying the package design, see `vignette("infer")`.
+
+```{r load-package, echo = FALSE, message = FALSE, warning = FALSE}
+library(infer)
+```
+
+```{r diagram, echo = FALSE, fig.cap = " ", fig.alt = "A diagram showing four steps to carry out randomization-based inference: specify hypothesis, generate data, calculate statistic, and visualize. From left to right, each step is connected by an arrow, while the diagram indicates that generating data and calculating statistics can happen iteratively."}
+knitr::include_graphics("https://raw.githubusercontent.com/tidymodels/infer/main/figs/ht-diagram.png")
+```
+
+If you're interested in learning more about randomization-based statistical inference generally, including applied examples of this package, we recommend checking out [Statistical Inference Via Data Science: A ModernDive Into R and the Tidyverse](https://moderndive.com/v2/) and [Introduction to Modern Statistics](https://openintro-ims.netlify.app/).
+
+### Installation
+
+------------------------------------------------------------------------
+
+To install the current stable version of infer from CRAN:
+
+```{r, eval = FALSE}
+install.packages("infer")
+```
+
+To install the developmental stable version of infer, make sure to install remotes first. The pkgdown website for this version is at [infer.tidymodels.org](https://infer.tidymodels.org/).
+
+```{r, eval = FALSE}
+# install.packages("pak")
+pak::pak("tidymodels/infer")
+```
+
+### Contributing
+
+------------------------------------------------------------------------
+
+We welcome others helping us make this package as user-friendly and efficient as possible. Please review our [contributing](https://github.com/tidymodels/infer/blob/main/CONTRIBUTING.md) and [conduct](https://github.com/tidymodels/infer/blob/main/.github/CODE_OF_CONDUCT.md) guidelines. By participating in this project you agree to abide by its terms.
+
+For questions and discussions about tidymodels packages, modeling, and machine learning, please [post on Posit Community](https://forum.posit.co/new-topic?category_id=15&tags=tidymodels,question). If you think you have encountered a bug, please [submit an issue](https://github.com/tidymodels/infer/issues). Either way, learn how to create and share a [reprex](https://reprex.tidyverse.org/articles/learn-reprex.html) (a minimal, reproducible example), to clearly communicate about your code. Check out further details on [contributing guidelines for tidymodels packages](https://www.tidymodels.org/contribute/) and [how to get help](https://www.tidymodels.org/help/).
+
+### Examples
+
+------------------------------------------------------------------------
+
+These examples are pulled from the "Full infer Pipeline Examples" vignette, accessible by calling `vignette("observed_stat_examples")`. They make use of the `gss` dataset supplied by the package, providing a sample of data from the [General Social Survey](https://gss.norc.org). The data looks like this:
+
+```{r load-gss, warning = FALSE, message = FALSE}
+# load in the dataset
+data(gss)
+
+# take a glimpse at it
+str(gss)
+```
+
+As an example, we'll run an analysis of variance on `age` and `partyid`, testing whether the age of a respondent is independent of their political party affiliation.
+
+Calculating the observed statistic,
+
+```{r, message = FALSE, warning = FALSE}
+F_hat <- gss |> 
+  specify(age ~ partyid) |>
+  calculate(stat = "F")
+```
+
+Then, generating the null distribution,
+
+```{r, message = FALSE, warning = FALSE}
+null_dist <- gss |>
+   specify(age ~ partyid) |>
+   hypothesize(null = "independence") |>
+   generate(reps = 1000, type = "permute") |>
+   calculate(stat = "F")
+```
+
+Visualizing the observed statistic alongside the null distribution,
+
+```{r viz, message = FALSE, warning = FALSE, eval = FALSE}
+visualize(null_dist) +
+  shade_p_value(obs_stat = F_hat, direction = "greater")
+```
+
+```{r viz-graphic, message = FALSE, warning = FALSE, echo = FALSE, fig.cap = " ", fig.alt = "A histogram showing a distribution of F statistics, right-tailed and centered around one. The x axis ranges from zero to five. The region of the histogram to the right of the observed statistic, just above two, is shaded red to represent the p-value."}
+knitr::include_graphics("https://raw.githubusercontent.com/tidymodels/infer/main/README_files/figure-gfm/viz-1.png")
+```
+
+Calculating the p-value from the null distribution and observed statistic,
+
+```{r, message = FALSE, warning = FALSE}
+null_dist |>
+  get_p_value(obs_stat = F_hat, direction = "greater")
+```
+
+
+Note that the formula and non-formula interfaces  (i.e., `age ~ partyid` vs. `response = age, explanatory =  partyid`) work for all implemented inference procedures in `infer`. Use whatever is more natural for you. If you will be doing modeling using functions like `lm()` and `glm()`, though, we recommend you begin to use the formula `y ~ x` notation as soon as possible.
+
+Other resources are available in the package vignettes! See `vignette("observed_stat_examples")` for more examples like the one above, and `vignette("infer")` for discussion of the underlying principles of the package design.
