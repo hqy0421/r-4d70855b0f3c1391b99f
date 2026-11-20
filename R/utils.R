@@ -58,7 +58,9 @@ copy_attrs <- function(
     "formula",
     "fitted",
     "type_desc_response",
-    "type_desc_explanatory"
+    "type_desc_explanatory",
+    "offset",
+    "exposure_unit"
   )
 ) {
   for (at in attrs) {
@@ -171,6 +173,18 @@ response_name <- function(x) {
 
 response_variable <- function(x) {
   x[[response_name(x)]]
+}
+
+offset_expr <- function(x) {
+  attr(x, "offset")
+}
+
+offset_name <- function(x) {
+  if (has_attr(x, "offset")) {
+    all.vars(offset_expr(x))
+  } else {
+    character(0)
+  }
 }
 
 theory_type <- function(x) {

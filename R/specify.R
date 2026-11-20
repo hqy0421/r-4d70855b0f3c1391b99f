@@ -19,6 +19,11 @@
 #' @param success The level of `response` that will be considered a success, as
 #'   a string. Needed for inference on one proportion, a difference in
 #'   proportions, and corresponding z stats.
+#' @param offset A variable name in `x` (or an expression involving variables
+#'   in `x`) to be used as an offset in model fitting with [fit()]. When
+#'   supplied, [fit()] defaults to `family = "poisson"` and includes
+#'   `offset(<offset>)` on the right-hand side of the model formula. This is
+#'   primarily used for event rate models; see [specify_event_rate()].
 #'
 #' @return A tibble containing the response (and explanatory, if specified)
 #'   variable data.
@@ -51,7 +56,8 @@ specify <- function(
   formula,
   response = NULL,
   explanatory = NULL,
-  success = NULL
+  success = NULL,
+  offset = NULL
 ) {
   check_type(x, is.data.frame)
 
@@ -61,8 +67,12 @@ specify <- function(
   # Parse response and explanatory variables
   response <- enquo(response)
   explanatory <- enquo(explanatory)
+  offset <- enquo(offset)
 
   x <- parse_variables(x, formula, response, explanatory)
+
+  # Parse the offset, if any
+  x <- parse_offset(x, offset)
 
   # Add attributes
   attr(x, "success") <- success
@@ -75,7 +85,7 @@ specify <- function(
 
   # Select variables
   x <- x |>
-    select(any_of(c(response_name(x), explanatory_name(x))))
+    select(any_of(c(response_name(x), explanatory_name(x), offset_name(x))))
 
   is_complete <- stats::complete.cases(x)
   if (!all(is_complete)) {
@@ -130,6 +140,14 @@ parse_variables <- function(
     attr(x, "formula") <- formula
   }
 
+  # A constant `1` on the right-hand side of a formula (e.g. `y ~ 1`)
+  # indicates an intercept-only model, as in other modeling functions;
+  # treat it as if no explanatory variable was supplied.
+  rhs <- attr(x, "explanatory")
+  if (is.numeric(rhs) && length(rhs) == 1 && !is.na(rhs) && rhs == 1) {
+    attr(x, "explanatory") <- NULL
+  }
+
   # Check response and explanatory variables to be appropriate for later use
   if (!has_response(x)) {
     cli_abort(
@@ -166,8 +184,74 @@ parse_variables <- function(
   x
 }
 
-check_success_arg <- function(x, success, call = caller_env()) {
-  response_col <- response_variable(x)
+# Process the `offset` argument (or an `offset()` term embedded in the
+# formula), storing the offset expression in the `offset` attribute.
+parse_offset <- function(x, offset, call = caller_env()) {
+  offset_expr <- get_expr(offset)
+
+  formula_offset <- NULL
+  if (has_attr(x, "formula")) {
+    formula_terms <- stats::terms(attr(x, "formula"))
+    offset_idx <- attr(formula_terms, "offset")
+    if (!is.null(offset_idx)) {
+      # `variables` is a call to `list(...)`; drop its head before indexing
+      formula_variables <- as.list(attr(formula_terms, "variables"))[-1]
+      formula_offset <- formula_variables[[offset_idx[1]]]
+    }
+  }
+
+  if (!is.null(offset_expr) && !is.null(formula_offset)) {
+    cli_abort(
+      c(
+        "The offset was supplied both in the `formula` and via the `offset` \\
+         argument.",
+        i = "Please supply the offset only once."
+      ),
+      call = call
+    )
+  }
+
+  if (is.null(offset_expr)) {
+    offset_expr <- formula_offset
+  }
+
+  attr(x, "offset") <- offset_expr
+
+  if (!is.null(offset_expr)) {
+    if (!rlang::is_symbolic(offset_expr)) {
+      cli_abort(
+        "The `offset` should be a bare variable name (not a string in \\
+         quotation marks).",
+        call = call
+      )
+    }
+
+    offset_vars <- all.vars(offset_expr)
+    missing_vars <- setdiff(offset_vars, names(x))
+
+    if (length(offset_vars) == 0 || length(missing_vars) > 0) {
+      cli_abort(
+        'The offset variable `{missing_vars[1]}` cannot be found in this \\
+         dataframe.',
+        call = call
+      )
+    }
+
+    if (
+      rlang::is_symbol(offset_expr) &&
+        !is.numeric(x[[as.character(offset_expr)]])
+    ) {
+      cli_abort(
+        "The `offset` variable `{as.character(offset_expr)}` must be numeric.",
+        call = call
+      )
+    }
+  }
+
+  x
+}
+
+check_success_arg <- function(x, success, call = caller_env()) {  response_col <- response_variable(x)
 
   if (!is.null(success)) {
     if (!is.character(success)) {

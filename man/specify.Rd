@@ -4,7 +4,14 @@
 \alias{specify}
 \title{Specify response and explanatory variables}
 \usage{
-specify(x, formula, response = NULL, explanatory = NULL, success = NULL)
+specify(
+  x,
+  formula,
+  response = NULL,
+  explanatory = NULL,
+  success = NULL,
+  offset = NULL
+)
 }
 \arguments{
 \item{x}{A data frame that can be coerced into a \link[tibble:tibble]{tibble}.}
@@ -22,6 +29,12 @@ explanatory variable. This is an alternative to using the formula argument.}
 \item{success}{The level of \code{response} that will be considered a success, as
 a string. Needed for inference on one proportion, a difference in
 proportions, and corresponding z stats.}
+
+\item{offset}{A variable name in \code{x} (or an expression involving variables
+in \code{x}) to be used as an offset in model fitting with \code{\link[=fit]{fit()}}. When
+supplied, \code{\link[=fit]{fit()}} defaults to \code{family = "poisson"} and includes
+\verb{offset(<offset>)} on the right-hand side of the model formula. This is
+primarily used for event rate models; see \code{\link[=specify_event_rate]{specify_event_rate()}}.}
 }
 \value{
 A tibble containing the response (and explanatory, if specified)
@@ -54,9 +67,9 @@ vignette("infer")
 
 }
 \seealso{
-Other core functions: 
-\code{\link{calculate}()},
-\code{\link{generate}()},
-\code{\link{hypothesize}()}
+Other core functions:
+\code{\link[=calculate]{calculate()}},
+\code{\link[=generate]{generate()}},
+\code{\link[=hypothesize]{hypothesize()}}
 }
 \concept{core functions}

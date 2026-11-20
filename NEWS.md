@@ -1,5 +1,18 @@
 # infer (development version)
 
+* Added event rate analysis. `build_event_panel()` computes effective
+  exposure and event counts per device and segment from online and exclusion
+  intervals (merged, subtracted, and clipped to a reporting period with
+  half-open boundaries), deduplicating events by stable ID.
+  `specify_event_rate()` brings the resulting count/exposure panel into
+  `specify()` with `log(exposure)` as an offset, and `fit()` now fits such
+  models with `family = "poisson"` by default. `fit_event_rate()` chains the
+  whole workflow, returning interval contributions, event attribution, the
+  IDs entering the model, and the native model coefficients.
+
+* `specify()` gains an `offset` argument for model fitting with `fit()`,
+  and now supports intercept-only formulas such as `y ~ 1`.
+
 # infer 1.1.0
 
 * Fixed bug where adding `shade_confidence_interval(NULL)` or `shade_p_value(NULL)` 

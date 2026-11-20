@@ -29,6 +29,11 @@ reference:
   - calculate
   - fit.infer
   - assume
+- title: Event Rate Analysis
+  contents:
+  - build_event_panel
+  - specify_event_rate
+  - fit_event_rate
 - title: Helpers
   contents:
   - visualize

@@ -20,7 +20,11 @@ generics::fit
 #' `family = "gaussian"` (linear regression). If the response is a 2-level
 #' factor or character, `fit()` will use `family = "binomial"` (logistic
 #' regression). To fit character or factor response variables with more than
-#' two levels, we recommend [parsnip::multinom_reg()].
+#' two levels, we recommend [parsnip::multinom_reg()]. If the object carries
+#' an `offset` (see the `offset` argument to [specify()] and
+#' [specify_event_rate()]), `fit()` will use `family = "poisson"` by default
+#' and include the offset in the model formula, as is appropriate for event
+#' rate models.
 #'
 #' infer provides a fit "method" for infer objects, which is a way of carrying
 #' out model fitting as applied to infer output. The "generic," imported from
@@ -125,6 +129,15 @@ fit.infer <- function(object, ...) {
   # construct it out of the explanatory and response arguments
   formula <- get_formula(object)
 
+  # Models with an offset (event rate models) are fitted with extra
+  # checks so that inestimable models fail explicitly
+  fit_fn <- if (has_attr(object, "offset")) {
+    check_offset_estimable(object, dots)
+    fit_offset_model
+  } else {
+    fit_linear_model
+  }
+
   if (is_generated(object)) {
     x <- object |>
       tidyr::nest(data = -replicate) |>
@@ -132,7 +145,7 @@ fit.infer <- function(object, ...) {
       dplyr::mutate(
         model = list(
           do.call(
-            fit_linear_model,
+            fit_fn,
             c(
               list(object = data, formula = formula),
               dots
@@ -144,7 +157,7 @@ fit.infer <- function(object, ...) {
       tidyr::unnest(model)
   } else {
     x <- do.call(
-      fit_linear_model,
+      fit_fn,
       c(
         list(object, formula),
         dots
@@ -178,7 +191,9 @@ check_family <- function(object, ..., call = caller_env()) {
     return(dots)
   }
 
-  if (response_type == "bin") {
+  if (has_attr(object, "offset")) {
+    dots[["family"]] <- stats::poisson
+  } else if (response_type == "bin") {
     dots[["family"]] <- stats::binomial
   } else {
     dots[["family"]] <- stats::gaussian
@@ -201,11 +216,11 @@ relevel_response <- function(x) {
 
 get_formula <- function(x) {
   if (has_attr(x, "formula")) {
-    return(attr(x, "formula"))
+    formula <- attr(x, "formula")
   } else {
     exp <- paste0(explanatory_name(x), collapse = " + ")
 
-    as.formula(
+    formula <- as.formula(
       glue(
         '{response_name(x)} ~
          {if (exp == "") NULL else exp}',
@@ -213,6 +228,22 @@ get_formula <- function(x) {
       )
     )
   }
+
+  # Append the offset term, if any, unless the formula already has one
+  if (
+    has_attr(x, "offset") &&
+      is.null(attr(stats::terms(formula), "offset"))
+  ) {
+    formula <- stats::update(
+      formula,
+      as.formula(
+        paste0("~ . + offset(", deparse1(offset_expr(x)), ")"),
+        env = environment(formula)
+      )
+    )
+  }
+
+  formula
 }
 
 fit_linear_model <- function(object, formula, ...) {
@@ -221,6 +252,11 @@ fit_linear_model <- function(object, formula, ...) {
     data = object,
     ...
   ) |>
+    tidy_model()
+}
+
+tidy_model <- function(model) {
+  model |>
     broom::tidy() |>
     dplyr::select(
       term,
@@ -232,4 +268,86 @@ fit_linear_model <- function(object, formula, ...) {
         TRUE ~ term
       )
     )
+}
+
+# Fit a model with an offset term, failing explicitly when the model
+# is not estimable
+fit_offset_model <- function(object, formula, ..., call = caller_env()) {
+  model <- tryCatch(
+    stats::glm(
+      formula = formula,
+      data = object,
+      ...
+    ),
+    error = function(cnd) {
+      cli_abort(
+        c(
+          "The model could not be estimated.",
+          x = conditionMessage(cnd)
+        ),
+        call = call
+      )
+    }
+  )
+
+  coefs <- stats::coef(model)
+
+  if (!isTRUE(model$converged)) {
+    cli_abort(
+      c(
+        "The model could not be estimated.",
+        x = "The model fitting algorithm did not converge."
+      ),
+      call = call
+    )
+  }
+
+  if (anyNA(coefs) || any(!is.finite(coefs))) {
+    cli_abort(
+      c(
+        "The model could not be estimated.",
+        x = "Some model coefficients are not finite; the set of explanatory \\
+             variables may be rank-deficient."
+      ),
+      call = call
+    )
+  }
+
+  tidy_model(model)
+}
+
+# Fail explicitly when an offset (event rate) model is not estimable
+# based on the data alone
+check_offset_estimable <- function(object, dots, call = caller_env()) {
+  if (
+    is_poisson_family(dots[["family"]]) &&
+      isTRUE(sum(response_variable(object)) == 0)
+  ) {
+    cli_abort(
+      c(
+        "The event rate model is not estimable.",
+        x = "No events were observed on any exposed segment, so the \\
+             Poisson model has no finite solution."
+      ),
+      call = call
+    )
+  }
+
+  invisible(TRUE)
+}
+
+is_poisson_family <- function(family) {
+  if (is.null(family)) {
+    return(FALSE)
+  }
+
+  if (is.function(family)) {
+    family <- tryCatch(family(), error = function(e) NULL)
+  }
+
+  if (is.character(family)) {
+    return(identical(family, "poisson"))
+  }
+
+  is.list(family) && identical(family[["family"]], "poisson")
 }

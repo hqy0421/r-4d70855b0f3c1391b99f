@@ -10,7 +10,7 @@
 #' @export
 print.infer <- function(x, ...) {
   attrs <- names(attributes(x))
-  header <- character(3)
+  header <- character(4)
   if ("response" %in% attrs) {
     header[1] <- glue(
       'Response: {response_name(x)} ({attr(x, "response_type")})',
@@ -26,6 +26,11 @@ print.infer <- function(x, ...) {
   }
   if ("null" %in% attrs) {
     header[3] <- glue('Null Hypothesis: {attr(x, "null")}', .null = "NULL")
+  }
+  if ("offset" %in% attrs && has_attr(x, "offset")) {
+    header[4] <- glue(
+      'Offset: {paste0(deparse(offset_expr(x)), collapse = " ")}'
+    )
   }
 
   cat(glue::glue_collapse(

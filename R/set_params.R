@@ -39,10 +39,13 @@ set_params <- function(x) {
   ) {
     # One mean
     if (attr(x, "response_type") %in% c("integer", "numeric")) {
-      attr(x, "theory_type") <- "One sample t"
-      attr(x, "distr_param") <- stats::t.test(
-        response_variable(x)
-      )[["parameter"]]
+      distr_param <- try_distr_param(
+        stats::t.test(response_variable(x))[["parameter"]]
+      )
+      if (!is.null(distr_param)) {
+        attr(x, "theory_type") <- "One sample t"
+        attr(x, "distr_param") <- distr_param
+      }
       attr(x, "type") <- "bootstrap"
     } else if (
       # One prop
@@ -75,21 +78,30 @@ set_params <- function(x) {
     ) {
       # Two sample means (t distribution)
       if (num_explanatory_levels == 2) {
-        attr(x, "theory_type") <- "Two sample t"
         # Keep track of Satterthwaite degrees of freedom since lost when
         # in aggregation w/ calculate()/generate()
-        attr(x, "distr_param") <- stats::t.test(
-          response_variable(x) ~ explanatory_variable(x)
-        )[["parameter"]]
+        distr_param <- try_distr_param(
+          stats::t.test(
+            response_variable(x) ~ explanatory_variable(x)
+          )[["parameter"]]
+        )
+        if (!is.null(distr_param)) {
+          attr(x, "theory_type") <- "Two sample t"
+          attr(x, "distr_param") <- distr_param
+        }
       } else {
         # >2 sample means (F distribution)
-        attr(x, "theory_type") <- "ANOVA"
         # Get numerator and denominator degrees of freedom
-        degrees <- stats::anova(stats::aov(
-          response_variable(x) ~ explanatory_variable(x)
-        ))$Df
-        attr(x, "distr_param") <- degrees[1]
-        attr(x, "distr_param2") <- degrees[2]
+        degrees <- try_distr_param(
+          stats::anova(stats::aov(
+            response_variable(x) ~ explanatory_variable(x)
+          ))$Df
+        )
+        if (!is.null(degrees)) {
+          attr(x, "theory_type") <- "ANOVA"
+          attr(x, "distr_param") <- degrees[1]
+          attr(x, "distr_param2") <- degrees[2]
+        }
       }
     }
 
@@ -109,12 +121,17 @@ set_params <- function(x) {
         attr(x, "theory_type") <- "Two sample props z"
       } else {
         # >2 sample proportions (chi-square test of indep)
-        attr(x, "theory_type") <- "Chi-square test of indep"
-        attr(x, "distr_param") <- suppressWarnings(
-          stats::chisq.test(
-            table(response_variable(x), explanatory_variable(x))
-          )$parameter
+        distr_param <- try_distr_param(
+          suppressWarnings(
+            stats::chisq.test(
+              table(response_variable(x), explanatory_variable(x))
+            )$parameter
+          )
         )
+        if (!is.null(distr_param)) {
+          attr(x, "theory_type") <- "Chi-square test of indep"
+          attr(x, "distr_param") <- distr_param
+        }
       }
     }
 
@@ -144,4 +161,12 @@ check_factor_levels <- function(x, type, name) {
       )
     }
   }
+}
+
+# Determine a theoretical distribution parameter, returning `NULL` (and
+# thus leaving the theoretical distribution unset) when the data are
+# insufficient to estimate it. Model fitting with `fit()` does not rely on
+# these parameters, so small or degenerate data should not fail here.
+try_distr_param <- function(expr) {
+  tryCatch(expr, error = function(e) NULL)
 }

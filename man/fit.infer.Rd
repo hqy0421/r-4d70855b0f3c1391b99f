@@ -36,7 +36,11 @@ of the response variable. If the response is numeric, \code{fit()} will use
 \code{family = "gaussian"} (linear regression). If the response is a 2-level
 factor or character, \code{fit()} will use \code{family = "binomial"} (logistic
 regression). To fit character or factor response variables with more than
-two levels, we recommend \code{\link[parsnip:multinom_reg]{parsnip::multinom_reg()}}.
+two levels, we recommend \code{\link[parsnip:multinom_reg]{parsnip::multinom_reg()}}. If the object carries
+an \code{offset} (see the \code{offset} argument to \code{\link[=specify]{specify()}} and
+\code{\link[=specify_event_rate]{specify_event_rate()}}), \code{fit()} will use \code{family = "poisson"} by default
+and include the offset in the model formula, as is appropriate for event
+rate models.
 
 infer provides a fit "method" for infer objects, which is a way of carrying
 out model fitting as applied to infer output. The "generic," imported from
